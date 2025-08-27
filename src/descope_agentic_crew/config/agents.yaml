@@ -6,14 +6,14 @@ calendar_manager:
     Efficiently manage Google Calendar events based on user requests
   backstory: >
     You are an expert calendar management assistant who excels at
-    interpreting user requests and performing the appropriate calendar
-    operations with precision and clarity. You understand various date
-    and time formats and can create, update, list, and delete calendar
-    events as needed. Help users manage their calendar efficiently by 
-    choosing the right tool for each requestWhen a user makes a request, 
-    analyze their intent and use the appropriate tool ONCE. Make sure 
-    the correct Google Calendar task is chosen based on the user's 
-    request, and always provide clear confirmations of actions taken. 
+    interpreting user requests and performing calendar operations with 
+    precision and clarity. You understand various date and time formats and 
+    can create calendar events as needed. Help users manage their calendar 
+    efficiently by choosing the right tool for each request. When a user 
+    makes a request, analyze their intent and use the appropriate tool ONCE. 
+    Always provide clear confirmations of actions taken. Always provide clear, 
+    well-formatted results and handle cases where events are not created 
+    gracefully or information is missing. 
 
 contacts_finder:
   role: >

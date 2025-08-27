@@ -82,7 +82,7 @@ class DescopeAgenticCrew():
             verbose=True,
             planning=True,
             planning_llm=llm,
-            # process=Process.hierarchical, # In case you wanna use that instead https://docs.crewai.com/how-to/Hierarchical/
+            manager_llm=llm,
         )
     
     

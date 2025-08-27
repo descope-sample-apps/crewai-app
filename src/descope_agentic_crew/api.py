@@ -19,7 +19,7 @@ except Exception as error:
     
 def validate_session(session_token):
     try:
-        jwt_response = descope_client.validate_session(session_token=session_token, audience=os.getenv("CLIENT_ID"))
+        jwt_response = descope_client.validate_session(session_token=session_token, audience=os.getenv("VITE_CLIENT_ID"))
         print("Successfully validated user session:")
         print(jwt_response)
         return jwt_response
@@ -76,61 +76,25 @@ def run_crew():
     
     print(f"Processing request: {user_request}")
     
-    # Run both tasks and capture individual results
-    calendar_result = None
-    contact_result = None
-    
     try:
-        # Run calendar task
-        print("📅 Running calendar task...")
-        calendar_task = crew_instance.create_calendar_task()
-        calendar_crew = Crew(
-            agents=[crew_instance.calendar_manager()],
-            tasks=[calendar_task],
-            process=Process.sequential,
-            verbose=True
-        )
-        calendar_result = calendar_crew.kickoff(inputs=inputs)
-        print(f"📅 Calendar result: {calendar_result}")
+        print("🚀 Running crew...")
+        main_crew = crew_instance.crew() 
+        result = main_crew.kickoff(inputs=inputs)
+        print(f"✅ Crew result: {result}")
+        
+        return jsonify({
+            "success": True,
+            "user_request": user_request,
+            "result": str(result)
+        })
+        
     except Exception as e:
-        print(f"❌ Calendar task failed: {str(e)}")
-        calendar_result = f"Calendar task failed: {str(e)}"
-    
-    try:
-        # Run contact task
-        print("👥 Running contact task...")
-        contact_task = crew_instance.find_contact_task()
-        contact_crew = Crew(
-            agents=[crew_instance.contacts_finder()],
-            tasks=[contact_task],
-            process=Process.sequential,
-            verbose=True
-        )
-        contact_result = contact_crew.kickoff(inputs=inputs)
-        print(f"👥 Contact result: {contact_result}")
-    except Exception as e:
-        print(f"❌ Contact task failed: {str(e)}")
-        contact_result = f"Contact task failed: {str(e)}"
-    
-    # Combine results
-    combined_result = ""
-    
-    if calendar_result:
-        combined_result += f"📅 CALENDAR RESULT:\n{calendar_result}\n\n"
-    
-    if contact_result:
-        combined_result += f"👥 CONTACT RESULT:\n{contact_result}\n\n"
-    
-    if not calendar_result and not contact_result:
-        combined_result = "No results from either task."
-    
-    return jsonify({
-        "success": True,
-        "user_request": user_request,
-        "calendar_result": str(calendar_result) if calendar_result else None,
-        "contact_result": str(contact_result) if contact_result else None,
-        "combined_result": combined_result
-    })
+        print(f"❌ Crew execution failed: {str(e)}")
+        return jsonify({
+            "success": False,
+            "user_request": user_request,
+            "error": f"Crew execution failed: {str(e)}"
+        }), 500
         
 
 if __name__ == '__main__':
