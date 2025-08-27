@@ -1,0 +1,62 @@
+
+create_calendar_task:
+  description: >
+    Create a new calendar event based on the user's request: {user_request}
+    
+    Parse the user's request to extract:
+      - Event title/subject
+      - Date and time (handle relative dates like "tomorrow", "next Tuesday")
+      - Duration or end time (default to 1 hour if not specified)
+      - Event description or additional details
+      - Location if mentioned
+      - Attendees/invitees (email addresses or contact names to invite)
+    
+    Smart Parsing:
+      - Convert natural language times ("2 PM", "morning", "afternoon")
+      - Handle date formats and relative references
+      - Make reasonable assumptions for missing information
+      - Use ISO format for API calls (YYYY-MM-DDTHH:MM:SS)
+    
+    Use the Google Calendar tool to create the event with proper formatting.
+    If attendees are mentioned, include them in the event invitation.
+  expected_output: >
+    Confirmation that the calendar event was successfully created, including:
+    event title, scheduled date and time, duration, event ID from Google Calendar,
+    list of attendees invited (if any), and any assumptions made during parsing. 
+    If creation fails, provide clear error message with suggested corrections.
+  agent: calendar_manager
+
+find_contact_task:
+  description: >
+    Search for contact information based on the user's request: {user_request}
+    
+    The tool will intelligently parse the user's natural language request and generate
+    an optimal search query using LLM. The search can handle:
+      - Contact names (full name, first name, last name, or partial name)
+      - Email addresses (full or partial email)
+      - Company names or organizations
+      - Any other identifying information mentioned
+    
+    Search Strategy:
+      - The LLM analyzes the user request and generates the most effective search query
+      - Prioritizes the most specific and distinctive information provided
+      - Handles various name formats, email patterns, and partial information
+      - Searches across all contact fields (name, email, company, notes, etc.)
+      - Provides intelligent fallback if the LLM query generation fails
+    
+    Use the Google Contacts API with the LLM-generated query to search for matching
+    contacts and retrieve comprehensive contact information including all available fields.
+  expected_output: >
+    Detailed contact information in a well-formatted response including:
+    - Full name
+    - All email addresses
+    - All phone numbers
+    - Company and job title
+    - Address information
+    - Any additional notes or metadata
+    - Contact ID from Google Contacts
+    
+    If no contacts are found, provide a clear message and suggest alternative
+    search terms. If multiple contacts are found, list all matches with clear
+    formatting to distinguish between them.
+  agent: contacts_finder

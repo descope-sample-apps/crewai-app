@@ -1,0 +1,29 @@
+[project]
+name = "descope_agentic_crew"
+version = "0.1.0"
+description = "descope-agentic-crew using crewAI"
+authors = [{ name = "Your Name", email = "you@example.com" }]
+requires-python = ">=3.10,<3.14"
+dependencies = [
+    "crewai[tools]>=0.157.0,<1.0.0",
+    "flask-cors>=6.0.1",
+    "descope>=1.0.0",
+    "requests>=2.31.0",
+    "google-api-python-client>=2.0.0",
+    "google-auth-httplib2>=0.1.0",
+    "google-auth-oauthlib>=1.0.0",
+]
+
+[project.scripts]
+descope_agentic_crew = "descope_agentic_crew.main:run"
+run_crew = "descope_agentic_crew.main:run"
+train = "descope_agentic_crew.main:train"
+replay = "descope_agentic_crew.main:replay"
+test = "descope_agentic_crew.main:test"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.crewai]
+type = "crew"
