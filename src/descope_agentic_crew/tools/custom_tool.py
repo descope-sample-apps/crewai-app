@@ -11,7 +11,7 @@ from googleapiclient.errors import HttpError
 
 def get_outbound_token(app_id, user_id, session_token):
     """Fetch Google Calendar access token from Descope outbound token API."""
-    project_id = os.getenv("VITE_DESCOPE_PROJECT_ID")
+    project_id = os.getenv("DESCOPE_PROJECT_ID")
     management_key = os.getenv("DESCOPE_MANAGEMENT_KEY")
     
     url = "https://api.descope.com/v1/mgmt/outbound/app/user/token/latest"

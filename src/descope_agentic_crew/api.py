@@ -11,7 +11,7 @@ import requests
 from descope import REFRESH_SESSION_TOKEN_NAME, SESSION_TOKEN_NAME, AuthException, DeliveryMethod, DescopeClient
 
 try:
-    descope_client = DescopeClient(project_id=os.getenv("VITE_DESCOPE_PROJECT_ID"))
+    descope_client = DescopeClient(project_id=os.getenv("DESCOPE_PROJECT_ID"))
 except Exception as error:
     print("failed to initialize. Error:")
     print(error)
@@ -19,7 +19,7 @@ except Exception as error:
     
 def validate_session(session_token):
     try:
-        jwt_response = descope_client.validate_session(session_token=session_token, audience=os.getenv("VITE_CLIENT_ID"))
+        jwt_response = descope_client.validate_session(session_token=session_token, audience=os.getenv("CLIENT_ID"))
         return jwt_response
     except Exception as error:
         return None
