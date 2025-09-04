@@ -73,8 +73,6 @@ class CalendarCreateTool(BaseTool):
         super().__init__()
         self.user_id = user_id
         self.session_token = session_token
-        print("user_id: " + user_id)
-        print("session_token: " + session_token)
     
     def _run(self, event_title: Optional[str] = None, 
              start_time: Optional[str] = None, end_time: Optional[str] = None,
@@ -114,7 +112,6 @@ class CalendarCreateTool(BaseTool):
                 attendee_emails = [email.strip() for email in invitees.split(',') if email.strip()]
                 if attendee_emails:
                     event['attendees'] = [{'email': email} for email in attendee_emails]
-                    print(f"Adding attendees: {attendee_emails}")
             
             print(f"Creating event: {json.dumps(event, indent=2)}")
             
@@ -157,8 +154,6 @@ class GoogleContactsTool(BaseTool):
         super().__init__()
         self.user_id = user_id
         self.session_token = session_token
-        print("user_id: " + user_id)
-        print("session_token: " + session_token)
     
     def _run(self, query: Optional[str] = None, 
              max_results: Optional[int] = 10) -> str:
@@ -223,29 +218,6 @@ class GoogleContactsTool(BaseTool):
                         
             except HttpError as personal_error:
                 print(f"Personal contacts search failed: {personal_error}")
-            
-            # Method 3: Try listing all contacts (fallback)
-            if not contacts_found:
-                try:
-                    print("Trying to list all contacts as fallback")
-                    request = service.people().connections().list(
-                        resourceName='people/me',
-                        pageSize=max_results,
-                        personFields="names,emailAddresses,phoneNumbers,organizations,addresses"
-                    )
-                    
-                    response = request.execute()
-                    
-                    if response.get('connections'):
-                        print(f"Found {len(response['connections'])} total contacts")
-                        # Filter contacts that match the query
-                        for person in response['connections']:
-                            if self._contact_matches_query(person, query):
-                                contact_info = self._format_contact_info(person)
-                                contacts_found.append(f"[All Contacts] {contact_info}")
-                                
-                except HttpError as list_error:
-                    print(f"List contacts failed: {list_error}")
             
             if contacts_found:
                 return f"Found {len(contacts_found)} contacts:\n\n" + "\n\n".join(contacts_found)

@@ -20,12 +20,8 @@ except Exception as error:
 def validate_session(session_token):
     try:
         jwt_response = descope_client.validate_session(session_token=session_token, audience=os.getenv("VITE_CLIENT_ID"))
-        print("Successfully validated user session:")
-        print(jwt_response)
         return jwt_response
     except Exception as error:
-        print("Could not validate user session. Error:")
-        print(error)
         return None
 
 warnings.filterwarnings("ignore", category=SyntaxWarning, module="pysbd")
@@ -34,10 +30,7 @@ warnings.filterwarnings("ignore", category=SyntaxWarning, module="pysbd")
 app = Flask(__name__)
 # Enable CORS for React frontend
 CORS(app)
-# This main file is intended to be a way for you to run your
-# crew locally, so refrain from adding unnecessary logic into this file.
-# Replace with inputs you want to test with, it will automatically
-# interpolate any tasks and agents information
+
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
@@ -55,7 +48,6 @@ def run_crew():
         return jsonify({"error": "Missing or invalid Authorization header"}), 401
 
     session_token = auth_header[len('Bearer '):]
-    print("session token: " + session_token)
     jwt_response = validate_session(session_token)
     if not jwt_response:
         return jsonify({"error": "Invalid session token"}), 401
