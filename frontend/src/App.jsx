@@ -39,15 +39,10 @@ function App() {
     try {
       // Get session token for authentication
       const sessionToken = auth.user?.access_token;
-      console.log(sessionToken)
       if (!sessionToken) {
         setErrorMessage('Please log in to use the calendar assistant');
         return;
       }
-      else {
-        console
-      }
-
       // Make API call to Flask backend with auth header
       const response = await axios.post('http://localhost:5001/api/crew', {
         user_request: userInput.trim()
