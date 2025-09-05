@@ -75,7 +75,18 @@ function App() {
   return (<>
     {!isAuthenticated &&
       (
-        <button onClick={() => void auth.signinRedirect()}>Log in</button>
+        <div className="login-container">
+          <div className="login-content">
+            <h1 className="login-title">CrewAI Descope Sample App</h1>
+            <p className="login-subtitle">Calendar & Contacts Assistant</p>
+            <button 
+              className="login-button" 
+              onClick={() => void auth.signinRedirect()}
+            >
+              Log in
+            </button>
+          </div>
+        </div>
       )
     }
 
