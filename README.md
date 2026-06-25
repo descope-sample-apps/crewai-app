@@ -1,251 +1,183 @@
-# Descope Agentic Crew - AI-Powered Calendar & Contact Management
+# Descope Agentic Crew — MCP Server for Calendar & Contacts
 
-A modern web application that combines CrewAI's multi-agent intelligence with Descope authentication to provide intelligent calendar and contact management. The system uses AI agents to understand natural language requests and perform Google Calendar and Google Contacts operations seamlessly.
+An **MCP (Model Context Protocol) server** that lets any MCP client schedule Google Calendar events and search Google Contacts through natural language. Authentication and Google access are handled by **Descope's Agentic Identity Hub**, and the actual work is done by a **CrewAI** multi-agent crew running on **Claude (Opus 4.8)**.
 
-## 🚀 Features
-
-- **Multi-Agent AI System**: Powered by CrewAI with specialized agents for calendar and contact management
-- **Natural Language Processing**: Understand and execute complex requests in plain English
-- **Google Integration**: Seamless integration with Google Calendar and Google Contacts APIs
-- **Modern Web Interface**: React frontend with Vite for fast development and smooth UX
-- **Secure Authentication**: Descope-powered authentication with session management
-- **RESTful API**: Flask backend with comprehensive error handling and validation
+The server exposes a single MCP tool, `run_crew`, which an authenticated client (e.g. MCP Inspector) calls with a request like _"Schedule a meeting with Kevin tomorrow at 2pm"_.
 
 ## 🏗️ Architecture
 
 ```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   React Frontend│    │  Flask Backend  │    │  CrewAI Agents  │
-│                 │    │                 │    │                 │
-│ • User Interface│◄──►│ • API Endpoints │◄──►│ • Calendar Mgr  │
-│ • Authentication│    │ • Session Valid │    │ • Contacts Find │
-│ • Request Form  │    │ • Crew Orchestr │    │ • Task Planning │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-         │                       │                       │
-         │                       │                       │
-         ▼                       ▼                       ▼
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Descope Auth  │    │  Google APIs    │    │  Custom Tools   │
-│                 │    │                 │    │                 │
-│ • JWT Tokens    │    │ • Calendar API  │    │ • Calendar Tool │
-│ • User Sessions │    │ • Contacts API  │    │ • Contacts Tool │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
+┌──────────────┐   OAuth 2.1 / MCP    ┌────────────────────┐
+│  MCP Client  │ ───────────────────► │   MCP Server       │
+│ (Inspector,  │ ◄─────────────────── │ (Starlette/uvicorn)│
+│  agent, IDE) │   run_crew tool      │   api.py           │
+└──────────────┘                      └─────────┬──────────┘
+                                                │
+            validate agentic token (JWKS)       │  fetch Google token for user
+                  ┌─────────────────────────────┴──────────────────────────┐
+                  ▼                                                         ▼
+       ┌──────────────────────┐                              ┌──────────────────────┐
+       │ Descope Agentic Hub  │                              │   CrewAI + Claude     │
+       │ • MCP Server (inbound│                              │ • Contacts Finder     │
+       │   OAuth, agentic AS) │                              │ • Calendar Manager    │
+       │ • Connections        │                              │ • Task Planner        │
+       │   (outbound Google   │                              └───────────┬──────────┘
+       │    tokens in vault)  │                                          │
+       └──────────────────────┘                              ┌───────────▼──────────┐
+                                                             │   Google APIs         │
+                                                             │ • Calendar v3         │
+                                                             │ • People (Contacts)   │
+                                                             └──────────────────────┘
 ```
+
+**How auth works:**
+1. The MCP client authenticates to the server via Descope's Agentic Identity Hub (OAuth 2.1). The server validates the resulting agentic access token against Descope's JWKS endpoint.
+2. During that consent flow, Descope also provisions **outbound** Google tokens (Calendar + Contacts) into the user's **Connection** vault via an _Agentic Hub / Connect_ flow step.
+3. When `run_crew` runs, the tools fetch the user's Google token from the Connection vault (using the agentic token) and call the Google APIs on the user's behalf — no service-account keys required.
 
 ## 🛠️ Tech Stack
 
-### Backend
-- **Python 3.10+**: Core runtime environment
-- **CrewAI**: Multi-agent AI orchestration framework
-- **Flask**: Web framework for API endpoints
-- **Descope**: Authentication and user management
-- **Google APIs**: Calendar and Contacts integration
-
-### Frontend
-- **React 19**: Modern UI framework
-- **Vite**: Fast build tool and dev server
-- **Descope React SDK**: Authentication components
-- **Axios**: HTTP client for API communication
+- **Python 3.10–3.13**
+- **MCP** (`mcp` SDK) over Streamable HTTP, served with **Starlette + uvicorn**
+- **CrewAI** — multi-agent orchestration
+- **Claude Opus 4.8** via **LiteLLM** (`anthropic/claude-opus-4-8`)
+- **Descope Agentic Identity Hub** — MCP Server (inbound auth) + Connections (outbound Google tokens)
+- **Google API Python Client** — Calendar v3 and People API
+- **PyJWT** — agentic token validation against Descope JWKS
 
 ## 📋 Prerequisites
 
-- Python 3.10 or higher (but less than 3.14)
-- Node.js 18+ and npm/yarn
-- Google Cloud Project with Calendar and Contacts APIs enabled
-- Descope project with proper configuration
+- Python 3.10–3.13 and [`uv`](https://docs.astral.sh/uv/)
+- An **Anthropic API key**
+- A **Descope** project with the Agentic Identity Hub enabled
+- A **Google Cloud** project with the **Calendar API** and **People API** enabled, and an OAuth 2.0 Client
 
-## 🚀 Installation
+## ⚙️ One-time setup
 
-### 1. Clone the Repository
+### 1. Google Cloud
+1. Enable the **Google Calendar API** and **Google People API**.
+2. Create an **OAuth 2.0 Client ID** (Web application).
+3. Add the redirect URI: `https://api.descope.com/v1/outbound/oauth/callback`
+4. Add your account as a **Test user** (or publish the consent screen). Calendar/Contacts are restricted scopes.
+
+### 2. Descope — Connections
+Create two **Connections** under Agentic Identity Hub:
+
+| Connection ID      | Google scope                                       |
+| ------------------ | -------------------------------------------------- |
+| `google-calendar`  | `https://www.googleapis.com/auth/calendar`         |
+| `google-contacts`  | `https://www.googleapis.com/auth/contacts.readonly`|
+
+For each, set the Google **Client ID** and **Client Secret** from step 1.
+
+### 3. Descope — MCP Server
+1. Create an **MCP Server** with URL `http://localhost:5001/mcp`.
+2. Add two scopes, each **linked to its Connection** and marked **mandatory**:
+   - `google-calendar` → `google-calendar` connection
+   - `google-contacts` → `google-contacts` connection
+
+### 4. Descope — consent flow (important)
+The inbound consent flow (e.g. `inbound-apps-user-consent`) must provision the outbound tokens, or the Google vault stays empty (`E152102`). In the flow editor, after user consent and before `END`, add an **Agentic Hub / Connect** step for each connection:
+- one with default outbound app `google-calendar`, scope `https://www.googleapis.com/auth/calendar`
+- one with default outbound app `google-contacts`, scope `https://www.googleapis.com/auth/contacts.readonly`
+
+## 🔑 Environment configuration
+
 ```bash
-git clone <your-repo-url>
-cd crewai-app
+cp .env.example .env
 ```
 
-### 2. Backend Setup
+Fill in `.env`:
+
 ```bash
-# Install Python dependencies using UV
-pip install uv
+# Descope
+DESCOPE_PROJECT_ID=your_descope_project_id
+DESCOPE_MANAGEMENT_KEY=your_management_key
+MCP_SERVER_ID=your_mcp_server_id
+
+# MCP Server
+MCP_SERVER_URL=http://localhost:5001
+
+# Google
+GOOGLE_CALENDAR_ID=primary
+
+# AI Model
+MODEL=anthropic/claude-opus-4-8
+ANTHROPIC_API_KEY=your_anthropic_api_key
+```
+
+> `.env` is gitignored — never commit it.
+
+## 🚀 Run
+
+```bash
+# Install dependencies
 uv sync
 
-# Set up environment variables
-cp .env.example .env
-# Edit .env with your configuration
+# Start the MCP server (port 5001)
+uv run python src/descope_agentic_crew/api.py
 ```
 
-### 3. Frontend Setup
-```bash
-cd frontend
-npm install
-```
-
-### 4. Environment Configuration
-Create a `.env` file in the root directory:
+Connect an MCP client. With the MCP Inspector:
 
 ```bash
-# Descope Configuration
-VITE_DESCOPE_PROJECT_ID=your_descope_project_id
-VITE_CLIENT_ID=your_client_id
-
-# Google API Configuration
-GOOGLE_APPLICATION_CREDENTIALS=path/to/your/service-account.json
-GOOGLE_CALENDAR_ID=primary
+npx @modelcontextprotocol/inspector@latest \
+  --transport http --server-url http://localhost:5001/mcp
 ```
 
-## 🔧 Configuration
+Open the printed `?MCP_PROXY_AUTH_TOKEN=...` URL, click **Connect**, complete the Descope login and Google consent (Calendar + Contacts), then call the **`run_crew`** tool:
 
-### Agents Configuration (`src/descope_agentic_crew/config/agents.yaml`)
-
-The system uses two specialized AI agents:
-
-1. **Calendar Manager**: Handles calendar event creation and management
-2. **Contacts Finder**: Searches and retrieves contact information
-
-### Tasks Configuration (`src/descope_agentic_crew/config/tasks.yaml`)
-
-Defines the specific tasks each agent can perform:
-
-- **create_calendar_task**: Creates calendar events from natural language
-- **find_contact_task**: Searches contacts using intelligent query generation
-
-## 🚀 Running the Application
-
-### Development Mode
-
-#### Backend
-```bash
-# From the root directory
-python src/descope_agentic_crew/api.py
+```
+user_request: Schedule a meeting with Kevin tomorrow at 2pm
 ```
 
-#### Frontend
-```bash
-cd frontend
-npm run dev
-```
+The crew searches your contacts for "Kevin", creates the event on your calendar, and emails the invite.
 
-### Production Build
-```bash
-# Build frontend
-cd frontend
-npm run build
+## 🧰 MCP Tool
 
-# Run backend (serves built frontend)
-python src/descope_agentic_crew/api.py
-```
+### `run_crew`
+| Param          | Type   | Description                                                  |
+| -------------- | ------ | ------------------------------------------------------------ |
+| `user_request` | string | Natural-language calendar/contacts request                   |
 
-## 📱 API Endpoints
+Returns the crew's final result (event confirmation, attendees invited, assumptions made).
 
-### Health Check
-```
-GET /api/health
-```
+## 🤖 Agents
 
-### Crew Execution
-```
-POST /api/crew
-Authorization: Bearer <session_token>
-Content-Type: application/json
-
-{
-  "user_request": "Schedule a meeting with John tomorrow at 2 PM"
-}
-```
-
-## 🔐 Authentication Flow
-
-1. User authenticates through Descope in the React frontend
-2. Frontend receives session token and stores it
-3. API requests include the session token in Authorization header
-4. Backend validates the token with Descope
-5. CrewAI agents execute tasks with user context
-
-## 🤖 AI Agents in Action
-
-### Calendar Manager Agent
-- **Role**: Calendar Management Specialist
-- **Capabilities**: 
-  - Parse natural language date/time expressions
-  - Create Google Calendar events
-  - Handle relative dates ("tomorrow", "next Tuesday")
-  - Manage event attendees and locations
-
-### Contacts Finder Agent
-- **Role**: Google Contacts Search Specialist
-- **Capabilities**:
-  - Intelligent contact search queries
-  - Fuzzy matching for partial information
-  - Comprehensive contact data retrieval
-  - Multi-field search optimization
-
-## 🧪 Testing
-
-```bash
-# Run tests
-uv run test
-
-# Run with coverage
-uv run test --cov
-```
+- **Task Planner** — breaks the request into an execution plan.
+- **Contacts Finder** — searches Google Contacts (lists + filters connections for reliability) and returns only real, tool-sourced contact data.
+- **Calendar Manager** — parses date/time (relative dates resolved against today's date, times in `America/Los_Angeles`) and creates the event, inviting the contact when an email was found.
 
 ## 📁 Project Structure
 
 ```
 crewai-app/
-├── src/
-│   └── descope_agentic_crew/
-│       ├── config/
-│       │   ├── agents.yaml      # Agent definitions
-│       │   └── tasks.yaml       # Task definitions
-│       ├── tools/
-│       │   └── custom_tool.py   # Google API integration tools
-│       ├── crew.py              # CrewAI crew configuration
-│       └── api.py               # Flask API endpoints
-├── frontend/                    # React application
-│   ├── src/
-│   ├── public/
-│   └── package.json
-├── tests/                       # Test suite
-├── pyproject.toml              # Python project configuration
-└── README.md                   # This file
+├── src/descope_agentic_crew/
+│   ├── api.py              # MCP server: auth (JWKS), run_crew tool, Starlette app
+│   ├── crew.py             # CrewAI crew, agents, Claude LLM config
+│   ├── config/
+│   │   ├── agents.yaml     # Agent roles/goals/backstories
+│   │   └── tasks.yaml      # Task definitions
+│   └── tools/
+│       └── custom_tool.py  # Google Calendar + Contacts tools (Descope Connection tokens)
+├── .env.example
+├── pyproject.toml
+└── README.md
 ```
-
-## 🔧 Customization
-
-### Adding New Agents
-1. Define agent configuration in `config/agents.yaml`
-2. Create agent method in `crew.py` with `@agent` decorator
-3. Implement required tools and capabilities
-
-### Adding New Tasks
-1. Define task configuration in `config/tasks.yaml`
-2. Create task method in `crew.py` with `@task` decorator
-3. Assign appropriate agents to tasks
-
-### Adding New Tools
-1. Create custom tool class in `tools/custom_tool.py`
-2. Implement required methods and Google API integration
-3. Assign tools to relevant agents
 
 ## 🐛 Troubleshooting
 
-### Common Issues
+- **`E152102 Outbound app token not found`** — the Google token isn't in the Connection vault. Make sure the consent flow has the **Agentic Hub / Connect** steps (setup §4) and re-run the connect flow.
+- **`Token signature verification failure` / key not found** — stale cached OAuth client in the MCP client. Clear the client's local storage and reconnect with a fresh session.
+- **`This model does not support assistant message prefill`** — Opus 4.8 rejects CrewAI's prefill; handled in `crew.py` (a LiteLLM patch ensures requests end with a user message).
+- **`ACCESS_TOKEN_SCOPE_INSUFFICIENT` on directory search** — harmless; the tool lists/filters personal contacts via the `contacts.readonly` scope.
+- **Event lands at the wrong hour** — times use `America/Los_Angeles` in `tools/custom_tool.py`; change the `timeZone` there for a different zone.
 
-1. **Authentication Errors**: Verify Descope project ID and client ID
-2. **Google API Errors**: Check service account credentials and API enablement
-3. **CrewAI Errors**: Ensure Python version compatibility (3.10-3.13)
-4. **Frontend Build Errors**: Clear node_modules and reinstall dependencies
+## 📚 References
 
-### Debug Mode
-```bash
-# Enable debug logging
-export FLASK_DEBUG=1
-python src/descope_agentic_crew/api.py
+- [Model Context Protocol](https://modelcontextprotocol.io)
+- [Descope Agentic Identity Hub](https://docs.descope.com)
+- [CrewAI](https://docs.crewai.com)
+- [Claude API](https://docs.anthropic.com)
+- [Google Calendar API](https://developers.google.com/calendar) · [People API](https://developers.google.com/people)
 ```
-
-## 📚 Documentation
-
-- [CrewAI Documentation](https://docs.crewai.com)
-- [Descope Documentation](https://docs.descope.com)
-- [Google Calendar API](https://developers.google.com/calendar)
-- [Google Contacts API](https://developers.google.com/people)
