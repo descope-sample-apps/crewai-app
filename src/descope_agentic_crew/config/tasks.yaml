@@ -18,7 +18,12 @@ create_calendar_task:
       - Use ISO format for API calls (YYYY-MM-DDTHH:MM:SS)
     
     Use the Google Calendar tool to create the event with proper formatting.
-    If attendees are mentioned, include them in the event invitation.
+
+    INVITEE RULES:
+      - Only add an attendee email that was actually returned by the contact
+        search task. NEVER invent or guess an email address.
+      - If the contact search found no contact / no email, create the event
+        WITHOUT any attendee and note that no invitation was sent.
   expected_output: >
     Confirmation that the calendar event was successfully created, including:
     event title, scheduled date and time, duration, event ID from Google Calendar,
@@ -29,34 +34,23 @@ create_calendar_task:
 find_contact_task:
   description: >
     Search for contact information based on the user's request: {user_request}
-    
-    The tool will intelligently parse the user's natural language request and generate
-    an optimal search query using LLM. The search can handle:
-      - Contact names (full name, first name, last name, or partial name)
-      - Email addresses (full or partial email)
-      - Company names or organizations
-      - Any other identifying information mentioned
-    
-    Search Strategy:
-      - The LLM analyzes the user request and generates the most effective search query
-      - Prioritizes the most specific and distinctive information provided
-      - Handles various name formats, email patterns, and partial information
-      - Searches across all contact fields (name, email, company, notes, etc.)
-      - Provides intelligent fallback if the LLM query generation fails
-    
-    Use the Google Contacts API with the LLM-generated query to search for matching
-    contacts and retrieve comprehensive contact information including all available fields.
+
+    CRITICAL RULES:
+      - You MUST call the "Google Contacts Search" tool to find the contact.
+        Do not answer from memory.
+      - You may ONLY report contact details (names, emails, phone numbers) that
+        the tool actually returns. NEVER invent, guess, or fabricate a contact,
+        an email address, or a company. Made-up data is strictly forbidden.
+      - If the tool returns no matching contacts, say exactly that and do not
+        produce any email address.
+
+    Extract the person's name from the request and pass it as the query to the
+    tool. Then report only what the tool returns.
   expected_output: >
-    Detailed contact information in a well-formatted response including:
-    - Full name
-    - All email addresses
-    - All phone numbers
-    - Company and job title
-    - Address information
-    - Any additional notes or metadata
-    - Contact ID from Google Contacts
-    
-    If no contacts are found, provide a clear message and suggest alternative
-    search terms. If multiple contacts are found, list all matches with clear
-    formatting to distinguish between them.
+    The exact contact information returned by the Google Contacts Search tool:
+    full name, email address(es), phone number(s), and company if present.
+
+    If the tool returned no contacts, state clearly: "No matching contact was
+    found in Google Contacts" and provide no email address. If multiple
+    contacts matched, list each one exactly as returned.
   agent: contacts_finder

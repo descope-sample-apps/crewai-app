@@ -1,3 +1,4 @@
+import litellm
 from crewai import Agent, Crew, Process, Task, LLM
 from crewai.project import CrewBase, agent, crew, task, before_kickoff, after_kickoff
 from crewai.agents.agent_builder.base_agent import BaseAgent
@@ -5,8 +6,26 @@ from typing import List
 import os
 from tools.custom_tool import CalendarCreateTool, GoogleContactsTool
 
+litellm.drop_params = True
+litellm.modify_params = True
 
-llm = LLM(model="gpt-4o")
+# Claude Opus 4.8 (and the 4.6+ family) reject assistant-message prefill, which
+# CrewAI's ReAct loop relies on. The installed litellm predates these models and
+# doesn't strip the trailing assistant turn, so we ensure every request ends with
+# a user message before it reaches Anthropic.
+_orig_completion = litellm.completion
+
+
+def _completion_no_prefill(*args, **kwargs):
+    msgs = kwargs.get("messages")
+    if isinstance(msgs, list) and msgs and msgs[-1].get("role") == "assistant":
+        kwargs["messages"] = msgs + [{"role": "user", "content": "Continue."}]
+    return _orig_completion(*args, **kwargs)
+
+
+litellm.completion = _completion_no_prefill
+
+llm = LLM(model="anthropic/claude-opus-4-8")
 
 @CrewBase
 class DescopeAgenticCrew():
@@ -15,12 +34,11 @@ class DescopeAgenticCrew():
     agents: List[BaseAgent]
     tasks: List[Task]
     userId: str = None
-    session_token: str = None
+    access_token: str = None
 
-    def __init__(self, user_id=None, session_token=None, *args, **kwargs):
-        """Initialize the crew with optional user_id and calendar access token"""
+    def __init__(self, user_id=None, access_token=None, *args, **kwargs):
         self.user_id = user_id
-        self.session_token = session_token
+        self.access_token = access_token
 
         super().__init__()
 
@@ -55,7 +73,7 @@ class DescopeAgenticCrew():
         task = Task(
             config=self.tasks_config.get('find_contact_task'),# type: ignore[index]
         )
-        task.tools = [GoogleContactsTool(user_id=self.user_id, session_token=self.session_token)]
+        task.tools = [GoogleContactsTool(user_id=self.user_id, access_token=self.access_token)]
         return task
 
     @task
@@ -63,7 +81,7 @@ class DescopeAgenticCrew():
         task = Task(
             config=self.tasks_config.get('create_calendar_task'),# type: ignore[index]
         )
-        task.tools = [CalendarCreateTool(user_id=self.user_id, session_token=self.session_token)]
+        task.tools = [CalendarCreateTool(user_id=self.user_id, access_token=self.access_token)]
         return task
 
     @crew

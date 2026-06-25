@@ -9,31 +9,27 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 
-def get_outbound_token(app_id, user_id, session_token):
-    """Fetch Google Calendar access token from Descope outbound token API."""
+def get_outbound_token(app_id, user_id, access_token):
+    """Fetch Google token from Descope Connections vault using the MCP access token."""
     project_id = os.getenv("DESCOPE_PROJECT_ID")
-    management_key = os.getenv("DESCOPE_MANAGEMENT_KEY")
-    
+
     url = "https://api.descope.com/v1/mgmt/outbound/app/user/token/latest"
     headers = {
         "Content-Type": "application/json",
-        "Authorization": f"Bearer {project_id}:{session_token}",
+        "Authorization": f"Bearer {project_id}:{access_token}",
     }
-
     payload = {
         "appId": app_id,
         "userId": user_id,
     }
-    
+
     response = requests.post(url, headers=headers, json=payload)
-    
+
     if response.status_code != 200:
         raise Exception(f"Failed to fetch token: {response.status_code} {response.text}")
-    
+
     data = response.json()
-    token_data = data["token"]
-    access_token = token_data.get("accessToken")
-    return access_token
+    return data["token"].get("accessToken")
 
 class MyCustomToolInput(BaseModel):
     """Input schema for MyCustomTool."""
@@ -66,35 +62,31 @@ class CalendarCreateTool(BaseTool):
     args_schema: Type[BaseModel] = CalendarInput
     user_id: str = None
     access_token: str = None
-    session_token: str = None
     base_url: str = "https://www.googleapis.com/calendar/v3"
 
-    def __init__(self, user_id=None, session_token=None):
+    def __init__(self, user_id=None, access_token=None):
         super().__init__()
         self.user_id = user_id
-        self.session_token = session_token
-    
-    def _run(self, event_title: Optional[str] = None, 
+        self.access_token = access_token
+
+    def _run(self, event_title: Optional[str] = None,
              start_time: Optional[str] = None, end_time: Optional[str] = None,
-             description: Optional[str] = None, event_id: Optional[str] = None, 
+             description: Optional[str] = None, event_id: Optional[str] = None,
              invitees: Optional[str] = None) -> str:
-        
-        self.access_token = get_outbound_token("google-calendar", self.user_id, self.session_token)
 
+        google_token = get_outbound_token("google-calendar", self.user_id, self.access_token)
 
-        if not self.access_token:
+        if not google_token:
             return "Error: No valid access token available for Google Calendar API"
 
-        return self._create_event(event_title, start_time, end_time, description, invitees)
+        return self._create_event(google_token, event_title, start_time, end_time, description, invitees)
 
-    def _create_event(self, title, start_time, end_time, description, invitees=None):
-        """Create a calendar event using Google Calendar API."""
+    def _create_event(self, google_token, title, start_time, end_time, description, invitees=None):
         if not title or not start_time:
             return "Error: title and start_time required"
-        
+
         try:
-            # Create OAuth2 credentials using access token
-            auth = credentials.Credentials(token=self.access_token)
+            auth = credentials.Credentials(token=google_token)
             
             # Build the Google Calendar service
             service = build("calendar", "v3", credentials=auth)
@@ -103,8 +95,8 @@ class CalendarCreateTool(BaseTool):
             event = {
                 'summary': title,
                 'description': description or '',
-                'start': {'dateTime': start_time, 'timeZone': 'UTC'},
-                'end': {'dateTime': end_time or start_time, 'timeZone': 'UTC'}
+                'start': {'dateTime': start_time, 'timeZone': 'America/Los_Angeles'},
+                'end': {'dateTime': end_time or start_time, 'timeZone': 'America/Los_Angeles'}
             }
             
             # Add attendees if provided
@@ -148,82 +140,58 @@ class GoogleContactsTool(BaseTool):
     args_schema: Type[BaseModel] = ContactsInput
     user_id: str = None
     access_token: str = None
-    session_token: str = None
 
-    def __init__(self, user_id=None, session_token=None):
+    def __init__(self, user_id=None, access_token=None):
         super().__init__()
         self.user_id = user_id
-        self.session_token = session_token
-    
-    def _run(self, query: Optional[str] = None, 
-             max_results: Optional[int] = 10) -> str:
-        
-        self.access_token = get_outbound_token("google-contacts", self.user_id, self.session_token)
+        self.access_token = access_token
 
-        if not self.access_token:
+    def _run(self, query: Optional[str] = None,
+             max_results: Optional[int] = 10) -> str:
+
+        google_token = get_outbound_token("google-contacts", self.user_id, self.access_token)
+
+        if not google_token:
             return "Error: No valid access token available for Google Contacts API"
 
-        return self._search_contacts(query, max_results)
+        return self._search_contacts(google_token, query, max_results)
 
-    def _search_contacts(self, query: str = None, max_results: int = 10) -> str:
-        """Search contacts using Google People API."""
+    def _search_contacts(self, google_token: str, query: str = None, max_results: int = 10) -> str:
         try:
-            # Create OAuth2 credentials using access token
-            auth = credentials.Credentials(token=self.access_token)
-            
+            auth = credentials.Credentials(token=google_token)
+
             # Build the Google People service
             service = build("people", "v1", credentials=auth)
-            
-            # Try multiple search methods
+
+            # List the user's contacts and filter client-side. This is more
+            # reliable than people.searchContacts, which requires an index
+            # warm-up call and typically returns empty on first use.
+            people = []
+            page_token = None
+            while True:
+                response = service.people().connections().list(
+                    resourceName="people/me",
+                    pageSize=1000,
+                    personFields="names,emailAddresses,phoneNumbers,organizations,addresses",
+                    pageToken=page_token,
+                ).execute()
+                people.extend(response.get("connections", []))
+                page_token = response.get("nextPageToken")
+                if not page_token:
+                    break
+
             contacts_found = []
-            
-            # Method 1: Try directory search (organization contacts)
-            try:
-                print(f"Trying directory search for: {query}")
-                request = service.people().searchDirectoryPeople(
-                    query=query or "",
-                    readMask="names,emailAddresses,phoneNumbers,organizations,addresses",
-                    sources=["DIRECTORY_SOURCE_TYPE_DOMAIN_PROFILE"],
-                    pageSize=max_results
-                )
-                
-                response = request.execute()
-                
-                if response.get('people'):
-                    print(f"Found {len(response['people'])} directory contacts")
-                    for person in response['people']:
-                        contact_info = self._format_contact_info(person)
-                        contacts_found.append(f"[Directory] {contact_info}")
-                    
-            except HttpError as dir_error:
-                print(f"Directory search failed: {dir_error}")
-            
-            # Method 2: Try personal contacts search
-            try:
-                print(f"Trying personal contacts search for: {query}")
-                request = service.people().searchContacts(
-                    query=query or "",
-                    readMask="names,emailAddresses,phoneNumbers,organizations,addresses",
-                    pageSize=max_results
-                )
-                
-                response = request.execute()
-                
-                if response.get('results'):
-                    print(f"Found {len(response['results'])} personal contacts")
-                    for result in response['results']:
-                        person = result.get('person', {})
-                        contact_info = self._format_contact_info(person)
-                        contacts_found.append(f"[Personal] {contact_info}")
-                        
-            except HttpError as personal_error:
-                print(f"Personal contacts search failed: {personal_error}")
-            
+            for person in people:
+                if self._contact_matches_query(person, query):
+                    contacts_found.append(self._format_contact_info(person))
+                    if len(contacts_found) >= max_results:
+                        break
+
             if contacts_found:
                 return f"Found {len(contacts_found)} contacts:\n\n" + "\n\n".join(contacts_found)
             else:
-                return f"No contacts found for query: '{query}'. Searched directory, personal contacts, and all contacts."
-            
+                return f"No contacts found for query: '{query}'."
+
         except HttpError as error:
             return f"Google People API Error: {error}"
         except Exception as e:
