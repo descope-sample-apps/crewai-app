@@ -4,37 +4,6 @@ An **MCP (Model Context Protocol) server** that lets any MCP client schedule Goo
 
 The server exposes a single MCP tool, `run_crew`, which an authenticated client (e.g. MCP Inspector) calls with a request like _"Schedule a meeting with Kevin tomorrow at 2pm"_.
 
-## 🏗️ Architecture
-
-```
-┌──────────────┐   OAuth 2.1 / MCP    ┌────────────────────┐
-│  MCP Client  │ ───────────────────► │   MCP Server       │
-│ (Inspector,  │ ◄─────────────────── │ (Starlette/uvicorn)│
-│  agent, IDE) │   run_crew tool      │   api.py           │
-└──────────────┘                      └─────────┬──────────┘
-                                                │
-            validate agentic token (JWKS)       │  fetch Google token for user
-                  ┌─────────────────────────────┴──────────────────────────┐
-                  ▼                                                         ▼
-       ┌──────────────────────┐                              ┌──────────────────────┐
-       │ Descope Agentic Hub  │                              │   CrewAI + Claude     │
-       │ • MCP Server (inbound│                              │ • Contacts Finder     │
-       │   OAuth, agentic AS) │                              │ • Calendar Manager    │
-       │ • Connections        │                              │ • Task Planner        │
-       │   (outbound Google   │                              └───────────┬──────────┘
-       │    tokens in vault)  │                                          │
-       └──────────────────────┘                              ┌───────────▼──────────┐
-                                                             │   Google APIs         │
-                                                             │ • Calendar v3         │
-                                                             │ • People (Contacts)   │
-                                                             └──────────────────────┘
-```
-
-**How auth works:**
-1. The MCP client authenticates to the server via Descope's Agentic Identity Hub (OAuth 2.1). The server validates the resulting agentic access token against Descope's JWKS endpoint.
-2. During that consent flow, Descope also provisions **outbound** Google tokens (Calendar + Contacts) into the user's **Connection** vault via an _Agentic Hub / Connect_ flow step.
-3. When `run_crew` runs, the tools fetch the user's Google token from the Connection vault (using the agentic token) and call the Google APIs on the user's behalf — no service-account keys required.
-
 ## 🛠️ Tech Stack
 
 - **Python 3.10–3.13**
@@ -164,14 +133,6 @@ crewai-app/
 ├── pyproject.toml
 └── README.md
 ```
-
-## 🐛 Troubleshooting
-
-- **`E152102 Outbound app token not found`** — the Google token isn't in the Connection vault. Make sure the consent flow has the **Agentic Hub / Connect** steps (setup §4) and re-run the connect flow.
-- **`Token signature verification failure` / key not found** — stale cached OAuth client in the MCP client. Clear the client's local storage and reconnect with a fresh session.
-- **`This model does not support assistant message prefill`** — Opus 4.8 rejects CrewAI's prefill; handled in `crew.py` (a LiteLLM patch ensures requests end with a user message).
-- **`ACCESS_TOKEN_SCOPE_INSUFFICIENT` on directory search** — harmless; the tool lists/filters personal contacts via the `contacts.readonly` scope.
-- **Event lands at the wrong hour** — times use `America/Los_Angeles` in `tools/custom_tool.py`; change the `timeZone` there for a different zone.
 
 ## 📚 References
 
